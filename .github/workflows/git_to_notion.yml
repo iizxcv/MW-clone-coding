@@ -53,18 +53,16 @@ jobs:
       # 4️⃣ Notion DB에 커밋 기록 추가
       - name: Add commit to Notion DB
         env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}            # Notion 통합 토큰
-          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }} # Notion DB ID
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           SHA: ${{ env.COMMIT_SHA }}
           AUTHOR: ${{ env.AUTHOR }}
           TITLE: ${{ env.TITLE }}
-          BODY: ${{ env.BODY }}
           DATE_ISO: ${{ env.DATE_ISO }}
         run: |
-          # 본문을 안전하게 JSON 문자열로 변환 (줄바꿈, 따옴표 포함)
-          BODY_JSON=$(echo "$BODY" | jq -Rs '.')
-
-          # Notion 페이지 생성용 JSON 구성
+          # commit_body.txt 파일 읽어서 JSON 안전 처리
+          BODY_JSON=$(jq -Rs '.' < commit_body.txt)
+      
           JSON_PAYLOAD=$(jq -n \
             --arg title "$TITLE" \
             --arg sha "$SHA" \
