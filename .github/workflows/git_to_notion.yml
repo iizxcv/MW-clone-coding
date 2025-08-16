@@ -51,7 +51,7 @@ jobs:
                 "Title": { "title": [{ "text": { "content": $title } }] },
                 "Commit SHA": { "rich_text": [{ "text": { "content": $sha } }] },
                 "Author": { "rich_text": [{ "text": { "content": $author } }] },
-                "Date": { "rich_text": [{ "text": { "content": $date } }] }
+                "Commit Date": { "rich_text": [{ "text": { "content": $date } }] }
               }
             }' | curl -s -X POST "https://api.notion.com/v1/pages" \
                 -H "Authorization: Bearer $NOTION_TOKEN" \
