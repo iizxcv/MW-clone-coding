@@ -12,8 +12,7 @@ jobs:
     steps:
       # 1️⃣ 소스 체크아웃
       - uses: actions/checkout@v3
-      with:
-        fetch-depth: 2  # 최소 2개 커밋 가져오기
+
 
       # 2️⃣ jq 설치 (JSON 파싱)
       - name: Install jq
