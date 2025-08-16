@@ -3,42 +3,32 @@ name: Git Commit → Notion DB
 on:
   push:
     branches:
-      - main  # main 브랜치에 커밋될 때만 동작
+      - main
 
 jobs:
   update-notion:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 소스 체크아웃
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 2  # 안전하게 커밋 로그 조회
+          fetch-depth: 2
 
-      # 2️⃣ jq 설치 (JSON 파싱)
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 3️⃣ 가장 최근 커밋 정보 가져오기 + ISO 8601 변환
       - name: Get last commit info
         id: get_commit
         run: |
-          git log -1 --pretty=format:'%H%n%an%n%s%n%ad' > last_commit.txt
+          # ISO 8601 형식으로 날짜 바로 가져오기
+          git log -1 --pretty=format:'%H%n%an%n%s%n%cI' > last_commit.txt
           readarray -t arr < last_commit.txt
-          COMMIT_SHA="${arr[0]}"
-          AUTHOR="${arr[1]}"
-          MESSAGE="${arr[2]}"
-          DATE_RAW="${arr[3]}"
-          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
-          echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
-          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
+          echo "COMMIT_SHA=${arr[0]}" >> $GITHUB_ENV
+          echo "AUTHOR=${arr[1]}" >> $GITHUB_ENV
+          echo "MESSAGE=${arr[2]}" >> $GITHUB_ENV
+          echo "DATE_ISO=${arr[3]}" >> $GITHUB_ENV
+          echo "Commit date ISO: ${arr[3]}"
 
-          # Git log 날짜를 ISO 8601로 변환 (UTC 기준)
-          DATE_ISO=$(date -u -d "$DATE_RAW" +"%Y-%m-%dT%H:%M:%SZ")
-          echo "DATE_ISO=$DATE_ISO" >> $GITHUB_ENV
-          echo "Converted $DATE_RAW → $DATE_ISO"
-
-      # 4️⃣ Notion에 커밋 기록 추가 (ISO 8601 적용) + API 응답 디버깅
       - name: Add commit to Notion DB
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
@@ -48,7 +38,6 @@ jobs:
           MESSAGE: ${{ env.MESSAGE }}
           DATE_ISO: ${{ env.DATE_ISO }}
         run: |
-          # JSON 생성 후 API 호출
           response=$(jq -n \
             --arg title "$MESSAGE" \
             --arg sha "$SHA" \
@@ -67,6 +56,4 @@ jobs:
                 -H "Notion-Version: 2022-06-28" \
                 -H "Content-Type: application/json" \
                 -d @-)
-
-          # API 응답 출력
           echo "Notion API response: $response"
