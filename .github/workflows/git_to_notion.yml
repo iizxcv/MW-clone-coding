@@ -32,13 +32,12 @@ jobs:
             echo "${{ github.event.pull_request.body }}" > commit_body.txt
           else
             BRANCH="${GITHUB_REF_NAME#refs/heads/}"
-            readarray -t arr < <(git log -1 --pretty=format:'%H%n%an%n%s%n%b%n%cI')
-            IDENTIFIER="${arr[0]}"
-            TITLE="${arr[2]}"
-            AUTHOR="${arr[1]}"
-            DATE_ISO="${arr[-1]}"
+            IDENTIFIER=$(git log -1 --pretty=format:'%H')        # 커밋 SHA
+            TITLE=$(git log -1 --pretty=format:'%s')             # 커밋 제목
+            AUTHOR=$(git log -1 --pretty=format:'%an')           # 작성자
+            DATE_ISO=$(git log -1 --pretty=format:'%cI')         # ✅ ISO 8601 안전 처리
             # 커밋 본문 임시 파일
-            printf "%s\n" "${arr[@]:3:${#arr[@]}-4}" > commit_body.txt
+            git log -1 --pretty=format:'%b' > commit_body.txt
           fi
 
       # 4️⃣ Notion DB upsert (PATCH if exists, POST if not)
