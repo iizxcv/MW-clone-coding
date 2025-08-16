@@ -1,4 +1,4 @@
-name: Git Commit/PR → Notion DB (Upsert)
+name: Git Commit/PR → Notion DB (Upsert with multiline)
 
 on:
   push:
@@ -19,47 +19,41 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 3️⃣ 커밋/PR 정보 수집
+      # 3️⃣ 커밋/PR 정보 수집 및 임시 파일로 본문 저장
       - name: Collect commit/PR info
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             IDENTIFIER="PR-${{ github.event.pull_request.number }}"
             BRANCH="${{ github.head_ref }}"
             TITLE="${{ github.event.pull_request.title }}"
-            BODY="${{ github.event.pull_request.body }}"
             AUTHOR="${{ github.event.pull_request.user.login }}"
             DATE_ISO="${{ github.event.pull_request.created_at }}"
+            # PR 본문 임시 파일
+            echo "${{ github.event.pull_request.body }}" > commit_body.txt
           else
-            IDENTIFIER=$(git log -1 --pretty=format:'%H')
             BRANCH="${GITHUB_REF_NAME#refs/heads/}"
             readarray -t arr < <(git log -1 --pretty=format:'%H%n%an%n%s%n%b%n%cI')
+            IDENTIFIER="${arr[0]}"
             TITLE="${arr[2]}"
-            BODY=$(printf "%s\n" "${arr[@]:3:${#arr[@]}-4}")
             AUTHOR="${arr[1]}"
             DATE_ISO="${arr[-1]}"
+            # 커밋 본문 임시 파일
+            printf "%s\n" "${arr[@]:3:${#arr[@]}-4}" > commit_body.txt
           fi
 
-          echo "IDENTIFIER=$IDENTIFIER" >> $GITHUB_ENV
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-          echo "TITLE=$TITLE" >> $GITHUB_ENV
-          echo "BODY=$BODY" >> $GITHUB_ENV
-          echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
-          echo "DATE_ISO=$DATE_ISO" >> $GITHUB_ENV
-
-      # 4️⃣ Notion DB upsert
+      # 4️⃣ Notion DB upsert (PATCH if exists, POST if not)
       - name: Upsert to Notion DB
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
-          IDENTIFIER: ${{ env.IDENTIFIER }}
-          TITLE: ${{ env.TITLE }}
-          BODY: ${{ env.BODY }}
-          AUTHOR: ${{ env.AUTHOR }}
-          DATE_ISO: ${{ env.DATE_ISO }}
-          BRANCH: ${{ env.BRANCH }}
+          IDENTIFIER: ${{ steps.collect.outputs.IDENTIFIER || '' }}
+          TITLE: ${{ steps.collect.outputs.TITLE || '' }}
+          AUTHOR: ${{ steps.collect.outputs.AUTHOR || '' }}
+          DATE_ISO: ${{ steps.collect.outputs.DATE_ISO || '' }}
+          BRANCH: ${{ steps.collect.outputs.BRANCH || '' }}
         run: |
-          # JSON 안전 처리
-          BODY_JSON=$(jq -Rn --arg str "$BODY" '$str')
+          # JSON 안전 처리: 멀티라인 본문
+          BODY_JSON=$(jq -Rs '.' < commit_body.txt)
 
           # 1️⃣ 기존 페이지 검색
           SEARCH_RESULT=$(curl -s -X POST "https://api.notion.com/v1/databases/$NOTION_DATABASE_ID/query" \
