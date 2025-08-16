@@ -1,6 +1,6 @@
 name: Git Commit → Notion DB
 
-# main 브랜치에 push될 때 자동 실행
+# main 브랜치에 push될 때 실행
 on:
   push:
     branches:
@@ -14,7 +14,7 @@ jobs:
       # 1️⃣ Git 레포 체크아웃
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 2  # 최소 2개의 커밋 정보 필요
+          fetch-depth: 2  # 최근 커밋 2개 가져오기
 
       # 2️⃣ jq 설치 (JSON 파싱용)
       - name: Install jq
@@ -24,45 +24,42 @@ jobs:
       - name: Get last commit info
         id: get_commit
         run: |
-          # Git log에서 각 항목을 줄 단위로 출력
-          # %H → SHA, %an → 작성자, %s → 제목, %b → 본문, %cI → 날짜(ISO 8601)
+          # Git log에서 SHA, 작성자, 제목, 본문, ISO 8601 날짜 가져오기
           git log -1 --pretty=format:'%H%n%an%n%s%n%b%n%cI' > last_commit.txt
 
-          # 파일을 배열로 읽어오기
+          # 배열로 읽기
           readarray -t arr < last_commit.txt
+          COMMIT_SHA="${arr[0]}"
+          AUTHOR="${arr[1]}"
+          TITLE="${arr[2]}"
+          DATE_ISO="${arr[-1]}"
 
-          # 환경변수로 저장
-          echo "COMMIT_SHA=${arr[0]}" >> $GITHUB_ENV
-          echo "AUTHOR=${arr[1]}" >> $GITHUB_ENV
-          echo "TITLE=${arr[2]}" >> $GITHUB_ENV
+          # 본문(body) 안전하게 파일로 저장 (멀티라인, 줄바꿈, 한글 가능)
+          printf "%s\n" "${arr[@]:3:${#arr[@]}-4}" > commit_body.txt
 
-          # 본문(body)은 여러 줄일 수 있으므로 합쳐서 하나의 변수에 저장
-          BODY=""
-          for ((i=3; i<${#arr[@]}-1; i++)); do
-            BODY="$BODY${arr[i]}"$'\n'
-          done
-          echo "BODY=$BODY" >> $GITHUB_ENV
+          # 환경변수로 필요한 값 설정
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+          echo "AUTHOR=$AUTHOR" >> $GITHUB_ENV
+          echo "TITLE=$TITLE" >> $GITHUB_ENV
+          echo "DATE_ISO=$DATE_ISO" >> $GITHUB_ENV
 
-          # ISO 8601 형식 날짜 (Git log에서 이미 ISO 8601)
-          echo "DATE_ISO=${arr[-1]}" >> $GITHUB_ENV
-
-          # 확인용 출력
-          echo "Commit date ISO: ${arr[-1]}"
-          echo "Commit body: $BODY"
+          echo "Commit date ISO: $DATE_ISO"
+          echo "Commit body saved to commit_body.txt"
 
       # 4️⃣ Notion DB에 커밋 기록 추가
       - name: Add commit to Notion DB
         env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}             # Notion 통합 토큰
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }} # Notion DB ID
           SHA: ${{ env.COMMIT_SHA }}
           AUTHOR: ${{ env.AUTHOR }}
           TITLE: ${{ env.TITLE }}
           DATE_ISO: ${{ env.DATE_ISO }}
         run: |
-          # commit_body.txt 파일 읽어서 JSON 안전 처리
+          # commit_body.txt 읽어서 JSON 안전 문자열로 변환
           BODY_JSON=$(jq -Rs '.' < commit_body.txt)
-      
+
+          # Notion 페이지 생성용 JSON
           JSON_PAYLOAD=$(jq -n \
             --arg title "$TITLE" \
             --arg sha "$SHA" \
