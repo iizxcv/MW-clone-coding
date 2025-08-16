@@ -12,6 +12,8 @@ jobs:
     steps:
       # 1️⃣ 소스 체크아웃
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # 커밋 로그 조회 안전하게
 
       # 2️⃣ jq 설치 (JSON 파싱)
       - name: Install jq
@@ -20,14 +22,14 @@ jobs:
       # 3️⃣ 가장 최근 커밋 정보 가져오기
       - name: Get last commit info
         run: |
-          git log -1 --pretty=format:'%H|%an|%s|%ad' > last_commit.txt
-          IFS='|' read -r sha author message date < last_commit.txt
-          echo "Commit SHA=$sha" >> $GITHUB_ENV
-          echo "Author=$author" >> $GITHUB_ENV
-          echo "Message=$message" >> $GITHUB_ENV
-          echo "Date=$date" >> $GITHUB_ENV
+          git log -1 --pretty=format:'%H%n%an%n%s%n%ad' > last_commit.txt
+          readarray -t arr < last_commit.txt
+          echo "Commit_SHA=${arr[0]}" >> $GITHUB_ENV
+          echo "Author=${arr[1]}" >> $GITHUB_ENV
+          echo "Message=${arr[2]}" >> $GITHUB_ENV
+          echo "Commit_Date=${arr[3]}" >> $GITHUB_ENV
 
-      # 4️⃣ Notion에 커밋 기록 추가
+      # 4️⃣ Notion에 커밋 기록 추가 (jq로 안전하게 JSON 생성)
       - name: Add commit to Notion DB
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
@@ -35,18 +37,23 @@ jobs:
           SHA: ${{ env.Commit_SHA }}
           AUTHOR: ${{ env.Author }}
           MESSAGE: ${{ env.Message }}
-          DATE: ${{ env.Date }}
+          DATE: ${{ env.Commit_Date }}
         run: |
-          curl -X POST "https://api.notion.com/v1/pages" \
-            -H "Authorization: Bearer $NOTION_TOKEN" \
-            -H "Notion-Version: 2022-06-28" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "parent": { "database_id": "'$NOTION_DATABASE_ID'" },
-              "properties": {
-                "Title": { "title": [{"text": {"content": "'$MESSAGE'"}}] },
-                "Commit SHA": { "rich_text": [{"text": {"content": "'$SHA'"}}] },
-                "Author": { "rich_text": [{"text": {"content": "'$AUTHOR'"}}] },
-                "Commit Date": { "rich_text": [{"text": {"content": "'$DATE'"}}] }
+          jq -n \
+            --arg title "$MESSAGE" \
+            --arg sha "$SHA" \
+            --arg author "$AUTHOR" \
+            --arg date "$DATE" \
+            '{
+              parent: { database_id: "'$NOTION_DATABASE_ID'" },
+              properties: {
+                "Title": { "title": [{ "text": { "content": $title } }] },
+                "Commit SHA": { "rich_text": [{ "text": { "content": $sha } }] },
+                "Author": { "rich_text": [{ "text": { "content": $author } }] },
+                "Commit Date": { "rich_text": [{ "text": { "content": $date } }] }
               }
-            }'
+            }' | curl -s -X POST "https://api.notion.com/v1/pages" \
+                -H "Authorization: Bearer $NOTION_TOKEN" \
+                -H "Notion-Version: 2022-06-28" \
+                -H "Content-Type: application/json" \
+                -d @-
