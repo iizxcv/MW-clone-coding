@@ -1,0 +1,52 @@
+name: Git Commit → Notion DB
+
+on:
+  push:
+    branches:
+      - main   # main 브랜치에 커밋될 때만 동작
+
+jobs:
+  update-notion:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ 소스 체크아웃
+      - uses: actions/checkout@v3
+
+      # 2️⃣ jq 설치 (JSON 파싱)
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      # 3️⃣ 가장 최근 커밋 정보 가져오기
+      - name: Get last commit info
+        run: |
+          git log -1 --pretty=format:'%H|%an|%s|%ad' > last_commit.txt
+          IFS='|' read -r sha author message date < last_commit.txt
+          echo "Commit SHA=$sha" >> $GITHUB_ENV
+          echo "Author=$author" >> $GITHUB_ENV
+          echo "Message=$message" >> $GITHUB_ENV
+          echo "Date=$date" >> $GITHUB_ENV
+
+      # 4️⃣ Notion에 커밋 기록 추가
+      - name: Add commit to Notion DB
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          SHA: ${{ env.Commit_SHA }}
+          AUTHOR: ${{ env.Author }}
+          MESSAGE: ${{ env.Message }}
+          DATE: ${{ env.Date }}
+        run: |
+          curl -X POST "https://api.notion.com/v1/pages" \
+            -H "Authorization: Bearer $NOTION_TOKEN" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            --data '{
+              "parent": { "database_id": "'$NOTION_DATABASE_ID'" },
+              "properties": {
+                "Title": { "title": [{"text": {"content": "'$MESSAGE'"}}] },
+                "Commit SHA": { "rich_text": [{"text": {"content": "'$SHA'"}}] },
+                "Author": { "rich_text": [{"text": {"content": "'$AUTHOR'"}}] },
+                "Commit Date": { "rich_text": [{"text": {"content": "'$DATE'"}}] }
+              }
+            }'
