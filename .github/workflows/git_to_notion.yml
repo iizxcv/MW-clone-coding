@@ -51,11 +51,6 @@ jobs:
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
-          IDENTIFIER: ${{ steps.collect.outputs.IDENTIFIER || '' }}
-          TITLE: ${{ steps.collect.outputs.TITLE || '' }}
-          AUTHOR: ${{ steps.collect.outputs.AUTHOR || '' }}
-          DATE_ISO: ${{ steps.collect.outputs.DATE_ISO || '' }}
-          BRANCH: ${{ steps.collect.outputs.BRANCH || '' }}
         run: |
           # JSON 안전 처리: 멀티라인 본문
           BODY_JSON=$(jq -Rs '.' < commit_body.txt)
